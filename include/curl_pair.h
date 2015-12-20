@@ -29,10 +29,9 @@
 #include <string>
 #include "curl_config.h"
 
-namespace curl {
 
-	// Forward reference to curl_form and curl_header
-    class curl_form;
+namespace curl {
+	class curl_form;
     class curl_header;
 
     /**
@@ -41,17 +40,32 @@ namespace curl {
      * for easy/multi/share handlers. It let you specify the libcurl option
      * and its value.
      */
-    template<class T, class K> class curl_pair {
+
+	template<class T,class K> class curl_pairBase {
+
+		static inline CURLoption filterOption(const CURLoption &option){
+			switch(option){
+				case CURLOPT_POSTFIELDS:
+					return CURLOPT_COPYPOSTFIELDS;
+				default:
+					return option;
+			}//switch
+		}
+
     public:
         /**
          * The two parameters constructor gives users a fast way to
          * build an object of this type.
          */
-        curl_pair(const T option, const K &value) : option(option), value(value) {};
+		curl_pairBase(const CURLoption option, const K &value) :
+			option(filterOption(option)), value(value) {};
+		curl_pairBase(const CURLoption option, const K &&value) :
+			option(filterOption(option)), value(value) {};
+
         /**
          * Simple method that returns the first field of the pair.
          */
-        inline T first() const NOEXCEPT {
+        inline CURLoption first() const NOEXCEPT {
             return this->option;
         }
         /**
@@ -60,27 +74,21 @@ namespace curl {
         inline K second() const NOEXCEPT {
             return this->value;
         }
-    private:
-        const T option;
+    protected:
+        const CURLoption option;
         const K &value;
     };
+
+
+	//the fist template parameter is keep for back compatibility
+    template<class T, class K> class curl_pair: public curl_pairBase<K> {
+
+    };
     
-    /**
-     * Template specialization for C++ strings and CURLformoption.
-     */
-    template<> class curl_pair<CURLformoption,std::string> {
+
+    template<class T> class curl_pair<T,std::string>: public curl_pairBase<std::string> {
     public:
-        /**
-         * The two parameters constructor gives users a fast way to
-         * build an object of this type.
-         */
-        curl_pair(const CURLformoption option, const std::string &value) : option(option), value(value) {}
-        /**
-         * Simple method that returns the first field of the pair.
-         */
-        inline CURLformoption first() const NOEXCEPT {
-            return this->option;
-        }
+
         /**
          * Simple method that returns the second field of the pair as
          * a C string, so a const char *.
@@ -88,61 +96,19 @@ namespace curl {
         inline const char *second() const NOEXCEPT {
             return this->value.c_str();
         }
-    private:
-        const CURLformoption option;
-        const std::string &value;
+
     };
-        
-    /**
-     * Template specialization for C++ strings. Why do we need this? Because
-     * curl_pair must be passed to C functions that doesen't know how to
-     * handle C++ string type, so we can specialize curl_pair class in a
-     * manner that its methods returns a const char *.
-     */
-    template<class T> class curl_pair<T,std::string> {
-    public:
-        /**
-         * The two parameters constructor gives users a fast way to 
-         * build an object of this type.
-         */
-        curl_pair(const T option, const std::string &value) : option(option == CURLOPT_POSTFIELDS ? CURLOPT_COPYPOSTFIELDS : option), value(value) {};
-        /**
-         * Simple method that returns the first field of the pair.
-         */
-        inline T first() const NOEXCEPT {
-            return this->option;
-        }
-        /**
-         * Simple method that returns the second field of the pair as
-         * a C string, so a const char *.
-         */
-        inline const char *second() const NOEXCEPT {
-            return this->value.c_str();
-        }
-    private:
-        const T option;
-        const std::string &value;
-    };
-    
+
+
     /**
      * Template specialization for curl_form type. Why do we need this? Because
      * curl_form wraps a struct curl_httppost list. libcurl functions can't handle
      * curl_form type, so we need to specialize curl_pair to return a struct
      * curl_httppost *.
      */
-    template<class T> class curl_pair<T,curl_form> {
+    template<class T> class curl_pair<T,curl_form>: public curl_pairBase<curl_form>{
     public:
-        /**
-         * The two parameters constructor gives users a fast way to build an object of
-         * this type.
-         */
-        curl_pair(const T option, const curl_form &value) : option(option), value(value) {}
-        /**
-         * Simple method that returns the first field of the pair.
-         */
-        inline T first() const NOEXCEPT {
-            return this->option;
-        }
+
         /**
          * Simple method that returns the second field of the pair as a 
          * C struct curl_httppost pointer.
@@ -150,9 +116,7 @@ namespace curl {
         inline const curl_httppost *second() const NOEXCEPT {
             return (this->value).get();
         }
-    private:
-        const T option;
-        const curl_form &value;
+
     };
     
     /**
@@ -161,29 +125,16 @@ namespace curl {
      * handle a curl_header type, so we need to specialize curl_pair to return a 
      * struct curl_slist *.
      */
-    template<class T> class curl_pair<T,curl_header> {
+    template<class T> class curl_pair<T,curl_header>:public curl_pairBase<curl_header> {
     public:
-        /**
-         * Thw two parameters constructor gives users a fast way to build an object
-         * of this type.
-         */
-        curl_pair(const T option, const curl_header &value) : option(option), value(value) {}
-        /**
-         * Simple method that returns the first field of the pair.
-         */
-        inline T first() const NOEXCEPT {
-            return this->option;
-        }
-        /**
+
+    	/**
          * Simple method that returns the second field of the pair as a C struct 
          * curl_slist pointer.
          */
         inline const curl_slist *second() const NOEXCEPT {
             return (this->value).get();
         }
-    private:
-        const T option;
-        const curl_header &value;
     };
 }
 
